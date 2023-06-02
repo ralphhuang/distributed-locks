@@ -15,6 +15,11 @@ public abstract class LockCallback {
     private static final Logger logger = LoggerFactory.getLogger(LockCallback.class);
 
     /**
+     * method be called before get lock!
+     */
+    public void beforeLock() {}
+
+    /**
      * method be called after get lock success!
      */
     public abstract void onGetLock();

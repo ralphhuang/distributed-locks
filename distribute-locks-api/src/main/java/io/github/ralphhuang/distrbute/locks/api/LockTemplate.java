@@ -25,6 +25,8 @@ public class LockTemplate {
 
     public void doWithCallback(final LockParam lockParam, LockCallback callback) {
         try {
+            //before lock
+            callback.beforeLock();
 
             //get lock
             StopWatch stopWatch = StopWatch.start();

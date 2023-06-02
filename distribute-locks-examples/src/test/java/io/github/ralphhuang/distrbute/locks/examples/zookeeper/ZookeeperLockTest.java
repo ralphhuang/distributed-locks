@@ -53,4 +53,24 @@ public class ZookeeperLockTest extends BaseTest {
 
     }
 
+    @Test
+    public void runWithTemplate() {
+
+        //time in mis to hold lock after apply lock success
+        Supplier<Integer> supplier = () -> new Random().nextInt(100) + 20;
+        Supplier<LockParam> lockParamSupplier = () -> LockParam.of("lockKey-" + UUID.randomUUID(), 3, TimeUnit.SECONDS);
+
+        //32 thread apply for a lock in loop
+        //multiThreadForOneLockWithLockTemplate(32, supplier, lockParamSupplier, zookeeperLock);
+
+        //8 thread apply for a lock in loop
+        multiThreadForOneLockWithLockTemplate(8, supplier, lockParamSupplier, zookeeperLock);
+
+        //12 thread apply for a lock in loop
+      //  multiThreadForOneLockWithLockTemplate(12, supplier, lockParamSupplier, zookeeperLock);
+
+        pause();
+
+    }
+
 }

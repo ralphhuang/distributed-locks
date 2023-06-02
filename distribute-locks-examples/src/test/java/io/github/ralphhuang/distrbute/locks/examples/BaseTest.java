@@ -1,7 +1,10 @@
 package io.github.ralphhuang.distrbute.locks.examples;
 
 import io.github.ralphhuang.distrbute.locks.api.LockFacade;
+import io.github.ralphhuang.distrbute.locks.api.LockTemplate;
+import io.github.ralphhuang.distrbute.locks.api.callback.LockCallback;
 import io.github.ralphhuang.distrbute.locks.api.domain.LockParam;
+import io.github.ralphhuang.distrbute.locks.api.exception.LockException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -80,6 +83,49 @@ public class BaseTest {
                     } catch (Exception e) {
                         LOGGER.error("unlock error");
                     }
+
+                    sleep(supplier.get());
+                }
+
+            }, "lock-apply-thread-" + T_ID.getAndIncrement()).start();
+        }
+    }
+
+    protected void multiThreadForOneLockWithLockTemplate(
+        int threadNums,
+        Supplier<Integer> supplier,
+        Supplier<LockParam> lockParamSupplier,
+        LockFacade lockFacadeImpl
+    ) {
+
+        LockParam lockParam = lockParamSupplier.get();
+
+        LOGGER.info("lockFacade impl is {}", lockFacadeImpl);
+        LOGGER.info("lockParam is {}", lockParam);
+
+        LockTemplate lockTemplate = new LockTemplate(lockFacadeImpl);
+
+        for (int i = 0; i < threadNums; i++) {
+            new Thread(() -> {
+
+                while (true) {
+                    lockTemplate.doWithCallback(lockParam, new LockCallback() {
+
+                        @Override
+                        public void beforeLock() {
+                            LOGGER.info("try lock");
+                        }
+
+                        @Override
+                        public void onGetLock() {
+                            LOGGER.info("lock success");
+                        }
+
+                        @Override
+                        public void onException(LockException e) {
+                            LOGGER.error("lock error");
+                        }
+                    });
 
                     sleep(supplier.get());
                 }
