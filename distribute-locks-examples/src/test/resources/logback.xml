@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration scan="true" scanPeriod="60 seconds" debug="false">
+  <property name="pattern"
+            value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%-5level] [%thread%X{sourceThread}][%X{traceId}] %logger{32}:[%line] - %msg%n"/>
+
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+      <pattern>${pattern}</pattern>
+    </encoder>
+  </appender>
+
+  <appender name="CONSOLE-ASYNC" class="ch.qos.logback.classic.AsyncAppender">
+    <queueSize>10000</queueSize>
+    <neverBlock>true</neverBlock>
+    <includeCallerData>true</includeCallerData>
+    <appender-ref ref="CONSOLE"/>
+  </appender>
+
+  <logger name="io.netty" level="INFO" additivity="false"/>
+
+  <!--  <root level="DEBUG">-->
+  <root level="INFO">
+    <appender-ref ref="CONSOLE-ASYNC"/>
+  </root>
+
+</configuration>
