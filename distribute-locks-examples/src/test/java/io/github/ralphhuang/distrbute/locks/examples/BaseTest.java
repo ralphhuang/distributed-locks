@@ -57,7 +57,7 @@ public class BaseTest {
         for (int i = 0; i < threadNums; i++) {
             new Thread(() -> {
 
-                while (true) {
+                //while (true) {
                     try {
                         LOGGER.info("try lock");
                         lockFacadeImpl.lock(lockParam);
@@ -85,7 +85,7 @@ public class BaseTest {
                     }
 
                     sleep(supplier.get());
-                }
+                //}
 
             }, "lock-apply-thread-" + T_ID.getAndIncrement()).start();
         }

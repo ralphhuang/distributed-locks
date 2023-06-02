@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * <p>lock operation template</p>
+ * ThreadSafe
  *
  * @author huangfeitao
  * @version : LockTemplate.java, v 0.1 2021-04-01  上午09:40:19 huangfeitao Exp $

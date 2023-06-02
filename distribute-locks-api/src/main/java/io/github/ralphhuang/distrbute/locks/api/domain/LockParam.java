@@ -23,16 +23,28 @@ public class LockParam {
      */
     private TimeUnit timeoutUnit;
 
+    /**
+     * the time that one lock hold by one thread
+     * if no renewal do by lock holder,the lock will be auto released
+     * default is 60s
+     * not support in Zookeeper
+     * supported in Etcd、Redis
+     */
+    private int maxHoldSeconds;
+
     public LockParam(String lockKey) {
-        this.lockKey = lockKey;
-        this.timeout = Long.MAX_VALUE;
-        this.timeoutUnit = TimeUnit.MILLISECONDS;
+        this(lockKey, Long.MAX_VALUE, TimeUnit.MILLISECONDS);
     }
 
     public LockParam(String lockKey, long timeout, TimeUnit timeoutUnit) {
+        this(lockKey, timeout, timeoutUnit, 60);
+    }
+
+    public LockParam(String lockKey, long timeout, TimeUnit timeoutUnit, int maxHoldSeconds) {
         this.lockKey = lockKey;
         this.timeout = timeout;
         this.timeoutUnit = timeoutUnit;
+        this.maxHoldSeconds = maxHoldSeconds;
     }
 
     public static LockParam of(String lockKey) {
@@ -40,6 +52,10 @@ public class LockParam {
     }
 
     public static LockParam of(String lockKey, long timeout, TimeUnit timeoutUnit) {
+        return new LockParam(lockKey, timeout, timeoutUnit);
+    }
+
+    public static LockParam of(String lockKey, long timeout, TimeUnit timeoutUnit, int maxHoldSeconds) {
         return new LockParam(lockKey, timeout, timeoutUnit);
     }
 
@@ -67,11 +83,20 @@ public class LockParam {
         this.timeoutUnit = timeoutUnit;
     }
 
+    public int getMaxHoldSeconds() {
+        return maxHoldSeconds;
+    }
+
+    public void setMaxHoldSeconds(int maxHoldSeconds) {
+        this.maxHoldSeconds = maxHoldSeconds;
+    }
+
     @Override
     public String toString() {
         return "LockParam{" + "lockKey='" + lockKey + '\''
                + ", timeout=" + timeout
                + ", timeoutUnit=" + timeoutUnit
+               + ", maxHoldSeconds=" + maxHoldSeconds
                + '}';
     }
 }

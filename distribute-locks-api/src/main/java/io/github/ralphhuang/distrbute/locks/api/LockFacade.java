@@ -5,7 +5,7 @@ import io.github.ralphhuang.distrbute.locks.api.exception.LockException;
 
 /**
  * Lock api
- *
+ * must be ThreadSafe
  * @author huangfeitao
  * @version LockFacade.java 2023/6/2 09:54 create by: huangfeitao
  **/

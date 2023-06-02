@@ -32,6 +32,10 @@
           <groupId>org.slf4j</groupId>
           <artifactId>slf4j-log4j12</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>com.google.guava</groupId>
+          <artifactId>guava</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
 
@@ -40,6 +44,7 @@
       <artifactId>distribute-locks-etcd</artifactId>
       <version>${project.parent.version}</version>
     </dependency>
+
 
     <dependency>
       <groupId>ch.qos.logback</groupId>

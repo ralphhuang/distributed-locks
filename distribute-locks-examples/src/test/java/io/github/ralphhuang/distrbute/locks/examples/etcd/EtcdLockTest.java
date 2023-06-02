@@ -1,7 +1,9 @@
-package io.github.ralphhuang.distrbute.locks.examples.zookeeper;
+package io.github.ralphhuang.distrbute.locks.examples.etcd;
 
+import io.etcd.jetcd.Client;
 import io.github.ralphhuang.distrbute.locks.api.domain.LockParam;
 import io.github.ralphhuang.distrbute.locks.examples.BaseTest;
+import io.github.ralphhuang.distrbute.locks.impl.etcd.EtcdLock;
 import io.github.ralphhuang.distrbute.locks.impl.zookeeper.ZookeeperLock;
 import org.apache.curator.RetryPolicy;
 import org.apache.curator.framework.CuratorFramework;
@@ -17,20 +19,18 @@ import java.util.function.Supplier;
 
 /**
  * @author huangfeitao
- * @version LockTest.java 2023/6/2 11:29 create by: huangfeitao
+ * @version EtcdLockTest.java 2023/6/2 11:29 create by: huangfeitao
  **/
-public class ZookeeperLockTest extends BaseTest {
+public class EtcdLockTest extends BaseTest {
 
-    private static final String zookeeperAddress = "127.0.0.1:2181";
+    private static final String etcdTarget = "http://127.0.0.1:2379";
 
-    private static ZookeeperLock zookeeperLock;
+    private static EtcdLock etcdLock;
 
     @BeforeClass
     public static void init() {
-        RetryPolicy retryPolicy = new ExponentialBackoffRetry(3000, 3);
-        CuratorFramework client = CuratorFrameworkFactory.newClient(zookeeperAddress, retryPolicy);
-        client.start();
-        zookeeperLock = new ZookeeperLock(client);
+        Client etcdClient = Client.builder().target(etcdTarget).build();
+        etcdLock = new EtcdLock(etcdClient);
     }
 
     @Test
@@ -41,13 +41,7 @@ public class ZookeeperLockTest extends BaseTest {
         Supplier<LockParam> lockParamSupplier = () -> LockParam.of("lockKey-" + UUID.randomUUID(), 3, TimeUnit.SECONDS);
 
         //32 thread apply for a lock in loop
-        multiThreadForOneLock(32, supplier, lockParamSupplier, zookeeperLock);
-
-        //8 thread apply for a lock in loop
-        multiThreadForOneLock(8, supplier, lockParamSupplier, zookeeperLock);
-
-        //12 thread apply for a lock in loop
-        multiThreadForOneLock(12, supplier, lockParamSupplier, zookeeperLock);
+        multiThreadForOneLock(1, supplier, lockParamSupplier, etcdLock);
 
         pause();
 
@@ -61,13 +55,7 @@ public class ZookeeperLockTest extends BaseTest {
         Supplier<LockParam> lockParamSupplier = () -> LockParam.of("lockKey-" + UUID.randomUUID(), 3, TimeUnit.SECONDS);
 
         //32 thread apply for a lock in loop
-        multiThreadForOneLockWithLockTemplate(32, supplier, lockParamSupplier, zookeeperLock);
-
-        //8 thread apply for a lock in loop
-        multiThreadForOneLockWithLockTemplate(8, supplier, lockParamSupplier, zookeeperLock);
-
-        //12 thread apply for a lock in loop
-        multiThreadForOneLockWithLockTemplate(12, supplier, lockParamSupplier, zookeeperLock);
+        multiThreadForOneLockWithLockTemplate(8, supplier, lockParamSupplier, etcdLock);
 
         pause();
 

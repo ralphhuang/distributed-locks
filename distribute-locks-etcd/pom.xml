@@ -11,8 +11,23 @@
 
   <artifactId>distribute-locks-etcd</artifactId>
   <packaging>jar</packaging>
+
   <properties>
     <maven.deploy.skip>true</maven.deploy.skip>
   </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.github.ralphhuang</groupId>
+      <artifactId>distribute-locks-api</artifactId>
+      <version>${project.parent.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>io.etcd</groupId>
+      <artifactId>jetcd-core</artifactId>
+    </dependency>
+
+  </dependencies>
 
 </project>

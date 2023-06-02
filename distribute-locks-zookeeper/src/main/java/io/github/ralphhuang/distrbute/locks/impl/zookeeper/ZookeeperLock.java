@@ -10,6 +10,8 @@ import org.apache.zookeeper.KeeperException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -26,7 +28,7 @@ public class ZookeeperLock implements LockFacade {
     /**
      * executes for async tasks
      */
-    private static final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(2);
+    private static final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(4);
 
     /**
      * all PERSISTENT nodes root path for locks
@@ -34,9 +36,12 @@ public class ZookeeperLock implements LockFacade {
      */
     public String rootPath;
 
-    private CuratorFramework zkClient;
+    private final CuratorFramework zkClient;
 
-    private static final ThreadLocal<InterProcessMutex> tl = new ThreadLocal<>();
+    /**
+     * in one thread may apply several locks
+     */
+    private static final ThreadLocal<Map<String, InterProcessMutex>> tl = ThreadLocal.withInitial(HashMap::new);
 
     public ZookeeperLock(CuratorFramework zkClient) {
         this(null, zkClient);
@@ -60,11 +65,13 @@ public class ZookeeperLock implements LockFacade {
     @Override
     public void lock(LockParam lockParam) throws LockException {
 
+        String lockPath = buildLockPath(lockParam);
+
         // for Reentrant
-        InterProcessMutex mutex = tl.get();
+        InterProcessMutex mutex = tl.get().get(lockPath);
         if (mutex == null) {
-            mutex = new InterProcessMutex(zkClient, buildLockPath(lockParam));
-            tl.set(mutex);
+            mutex = new InterProcessMutex(zkClient, lockPath);
+            tl.get().put(lockPath, mutex);
         }
 
         try {
@@ -79,7 +86,10 @@ public class ZookeeperLock implements LockFacade {
 
     @Override
     public void release(LockParam lockParam) {
-        InterProcessMutex mutex = tl.get();
+
+        String lockPath = buildLockPath(lockParam);
+
+        InterProcessMutex mutex = tl.get().get(lockPath);
         if (mutex == null) {
             return;
         }
@@ -91,8 +101,9 @@ public class ZookeeperLock implements LockFacade {
             // other zookeeper exceptions
             LOGGER.error("error in lock release:", t);
         } finally {
+            tl.get().remove(lockPath);
             // clean lock node after 1S,if there is no others apply or hold on this path , this lock node will be  delete
-            executorService.schedule(new Cleaner(zkClient, buildLockPath(lockParam)), 1L, TimeUnit.SECONDS);
+            executorService.schedule(new CleanerTask(zkClient, buildLockPath(lockParam)), 1L, TimeUnit.SECONDS);
         }
     }
 
@@ -100,11 +111,11 @@ public class ZookeeperLock implements LockFacade {
         return rootPath + lockParam.getLockKey();
     }
 
-    static class Cleaner implements Runnable {
+    static class CleanerTask implements Runnable {
         private final CuratorFramework client;
         private final String path;
 
-        public Cleaner(CuratorFramework client, String path) {
+        public CleanerTask(CuratorFramework client, String path) {
             this.client = client;
             this.path = path;
         }
@@ -119,7 +130,7 @@ public class ZookeeperLock implements LockFacade {
                 // NotEmptyException: this occur where some one other hold or apply lock on this path.
             } catch (Exception e) {
                 //zookeeper error
-                LOGGER.error("error in lock cleaner job:", e);
+                LOGGER.error("error in lock cleaner job,path={}", path, e);
             }
         }
 
