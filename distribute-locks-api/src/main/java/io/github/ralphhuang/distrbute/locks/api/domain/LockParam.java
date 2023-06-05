@@ -56,7 +56,7 @@ public class LockParam {
     }
 
     public static LockParam of(String lockKey, long timeout, TimeUnit timeoutUnit, int maxHoldSeconds) {
-        return new LockParam(lockKey, timeout, timeoutUnit);
+        return new LockParam(lockKey, timeout, timeoutUnit, maxHoldSeconds);
     }
 
     public String getLockKey() {

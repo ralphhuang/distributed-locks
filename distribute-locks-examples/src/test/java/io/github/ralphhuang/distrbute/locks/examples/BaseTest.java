@@ -58,33 +58,35 @@ public class BaseTest {
             new Thread(() -> {
 
                 //while (true) {
-                    try {
-                        LOGGER.info("try lock");
-                        lockFacadeImpl.lock(lockParam);
-                        LOGGER.info("lock success");
-                        LOGGER.info("try reLock");
-                        lockFacadeImpl.lock(lockParam);
-                        LOGGER.info("reLock success");
-                    } catch (Exception e) {
-                        LOGGER.error("lock error");
-                    }
+                try {
+                    LOGGER.info("try lock");
+                    lockFacadeImpl.lock(lockParam);
+                    LOGGER.info("lock success");
+                    //LOGGER.info("try reLock");
+                    //lockFacadeImpl.lock(lockParam);
+                    //LOGGER.info("reLock success");
+                } catch (Exception e) {
+                    LOGGER.error("lock error", e);
+                }
 
-                    //mock hold lock for biz
-                    sleep(supplier.get());
+                //mock hold lock for biz
+                //sleep(supplier.get());
 
-                    //release lock
-                    try {
-                        LOGGER.info("try unlock");
-                        lockFacadeImpl.release(lockParam);
-                        LOGGER.info("unlock success");
-                        LOGGER.info("try unlock");
-                        lockFacadeImpl.release(lockParam);
-                        LOGGER.info("unlock success");
-                    } catch (Exception e) {
-                        LOGGER.error("unlock error");
-                    }
+                sleep(1000);
 
-                    sleep(supplier.get());
+                //release lock
+                try {
+                    //LOGGER.info("try unlock");
+                    lockFacadeImpl.release(lockParam);
+                    LOGGER.info("unlock success");
+                    //LOGGER.info("try unlock");
+                    // lockFacadeImpl.release(lockParam);
+                    //LOGGER.info("unlock success");
+                } catch (Exception e) {
+                    LOGGER.error("unlock error");
+                }
+
+                // sleep(supplier.get());
                 //}
 
             }, "lock-apply-thread-" + T_ID.getAndIncrement()).start();

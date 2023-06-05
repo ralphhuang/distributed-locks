@@ -8,4 +8,5 @@ public enum LockExceptionCode {
 
     TIME_OUT,
     LOCK_FAILED,
+    UNLOCK_FAILED,
 }
