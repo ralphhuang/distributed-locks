@@ -16,7 +16,11 @@
     <appender-ref ref="CONSOLE"/>
   </appender>
 
-  <logger name="io.github.ralphhuang.distrbute.locks" level="info" additivity="false">
+  <logger name="io.github.ralphhuang.distrbute.locks" level="warn" additivity="false">
+    <appender-ref ref="CONSOLE-ASYNC"/>
+  </logger>
+
+  <logger name="io.github.ralphhuang.distrbute.locks.examples" level="info" additivity="false">
     <appender-ref ref="CONSOLE-ASYNC"/>
   </logger>
 

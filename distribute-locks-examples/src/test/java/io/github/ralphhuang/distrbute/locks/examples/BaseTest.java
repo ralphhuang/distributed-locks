@@ -20,6 +20,7 @@ public class BaseTest {
 
     protected static final Logger LOGGER = LoggerFactory.getLogger(BaseTest.class);
 
+    private static final AtomicInteger G_ID = new AtomicInteger();
     private static final AtomicInteger T_ID = new AtomicInteger();
 
     protected void pause() {
@@ -49,47 +50,42 @@ public class BaseTest {
         LockFacade lockFacadeImpl
     ) {
 
+        //多个线程持续竞争同一把锁
         LockParam lockParam = lockParamSupplier.get();
-
         LOGGER.info("lockFacade impl is {}", lockFacadeImpl);
-        LOGGER.info("lockParam is {}", lockParam);
+        int groupId = G_ID.incrementAndGet();
+        AtomicInteger T_ID = new AtomicInteger();
 
         for (int i = 0; i < threadNums; i++) {
             new Thread(() -> {
+                while (true) {
+                    try {
+                        LOGGER.info("try lock");
+                        lockFacadeImpl.lock(lockParam);
+                        lockFacadeImpl.lock(lockParam);
+                        LOGGER.info("lock success");
+                    } catch (Exception e) {
+                        LOGGER.error("lock error", e);
+                        continue;
+                    }
 
-                //while (true) {
-                try {
-                    LOGGER.info("try lock");
-                    lockFacadeImpl.lock(lockParam);
-                    LOGGER.info("lock success");
-                    //LOGGER.info("try reLock");
-                    //lockFacadeImpl.lock(lockParam);
-                    //LOGGER.info("reLock success");
-                } catch (Exception e) {
-                    LOGGER.error("lock error", e);
+                    //mock hold lock for biz
+                    sleep(supplier.get());
+
+                    //release lock
+                    try {
+                        LOGGER.info("try unlock");
+                        lockFacadeImpl.release(lockParam);
+                        lockFacadeImpl.release(lockParam);
+                        LOGGER.info("unlock success");
+                    } catch (Exception e) {
+                        LOGGER.error("unlock error");
+                    }
+
+                    //sleep(supplier.get());
                 }
 
-                //mock hold lock for biz
-                //sleep(supplier.get());
-
-                sleep(1000);
-
-                //release lock
-                try {
-                    //LOGGER.info("try unlock");
-                    lockFacadeImpl.release(lockParam);
-                    LOGGER.info("unlock success");
-                    //LOGGER.info("try unlock");
-                    // lockFacadeImpl.release(lockParam);
-                    //LOGGER.info("unlock success");
-                } catch (Exception e) {
-                    LOGGER.error("unlock error");
-                }
-
-                // sleep(supplier.get());
-                //}
-
-            }, "lock-apply-thread-" + T_ID.getAndIncrement()).start();
+            }, "lock-apply-thread-" + groupId + "-" + T_ID.getAndIncrement()).start();
         }
     }
 

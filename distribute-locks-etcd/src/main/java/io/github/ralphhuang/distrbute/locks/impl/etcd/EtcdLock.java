@@ -138,7 +138,7 @@ public class EtcdLock implements LockFacade {
             } finally {
                 tl.get().remove(lockPath);
                 // clean lock node after 1S,if there is no others apply or hold on this path , this lock node will be  delete
-                executorService.submit(new LeaseCleanTask(leaseClient, previousPair.getLeft()));
+                //executorService.submit(new LeaseCleanTask(leaseClient, previousPair.getLeft()));
                 LOGGER.info("unlock timeCost={}ms", stopWatch.get());
             }
         }

@@ -125,4 +125,17 @@
     </plugins>
   </build>
 
+  <distributionManagement>
+    <repository>
+      <id>deployRelease</id>
+      <url>http://nexus.weihui.com:8081/content/repositories/releases/</url>
+      <uniqueVersion>true</uniqueVersion>
+    </repository>
+    <snapshotRepository>
+      <id>deploySnapshot</id>
+      <url>http://nexus.weihui.com:8081/content/repositories/snapshots/</url>
+      <uniqueVersion>true</uniqueVersion>
+    </snapshotRepository>
+  </distributionManagement>
+
 </project>
