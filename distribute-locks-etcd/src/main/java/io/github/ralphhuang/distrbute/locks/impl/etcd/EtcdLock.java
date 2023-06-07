@@ -107,7 +107,7 @@ public class EtcdLock implements LockFacade {
                 //save key to local thread cache,for lock reentrant
                 tl.get().put(lockPath, Pair.of(leaseId, response.getKey()));
             } finally {
-                LOGGER.info("lock timeCost={}ms", stopWatch.get());
+                LOGGER.debug("lock timeCost={}ms", stopWatch.get());
             }
 
         } catch (TimeoutException te) {
@@ -138,8 +138,8 @@ public class EtcdLock implements LockFacade {
             } finally {
                 tl.get().remove(lockPath);
                 // clean lock node after 1S,if there is no others apply or hold on this path , this lock node will be  delete
-                //executorService.submit(new LeaseCleanTask(leaseClient, previousPair.getLeft()));
-                LOGGER.info("unlock timeCost={}ms", stopWatch.get());
+                executorService.submit(new LeaseCleanTask(leaseClient, previousPair.getLeft()));
+                LOGGER.debug("unlock timeCost={}ms", stopWatch.get());
             }
         }
     }
@@ -166,7 +166,7 @@ public class EtcdLock implements LockFacade {
             } catch (Throwable e) {
                 LOGGER.warn("error in lock cleaner job,leaseId={}", leaseId, e);
             } finally {
-                LOGGER.info("RenewalLeaseTask timeCost={}ms", stopWatch.get());
+                LOGGER.debug("RenewalLeaseTask timeCost={}ms", stopWatch.get());
             }
         }
     }
@@ -190,7 +190,7 @@ public class EtcdLock implements LockFacade {
             } catch (Throwable t) {
                 LOGGER.error("unExpected error in lock renew job,leaseId={}", leaseId, t);
             } finally {
-                LOGGER.info("RenewalLeaseTask timeCost={}ms", stopWatch.get());
+                LOGGER.debug("RenewalLeaseTask timeCost={}ms", stopWatch.get());
             }
         }
     }
@@ -240,7 +240,7 @@ public class EtcdLock implements LockFacade {
         } catch (Throwable t) {
             throw new LockException(LockExceptionCode.LOCK_FAILED);
         } finally {
-            LOGGER.info("applyLease timeCost={}ms", stopWatch.get());
+            LOGGER.debug("applyLease timeCost={}ms", stopWatch.get());
         }
     }
 
@@ -256,7 +256,7 @@ public class EtcdLock implements LockFacade {
                 TimeUnit.SECONDS
             );
         } finally {
-            LOGGER.info("submitLeaseRenewTask timeCost={}ms", stopWatch.get());
+            LOGGER.debug("submitLeaseRenewTask timeCost={}ms", stopWatch.get());
         }
     }
 
@@ -280,7 +280,7 @@ public class EtcdLock implements LockFacade {
                 throw new LockException(LockExceptionCode.LOCK_FAILED);
             }
         } finally {
-            LOGGER.info("renewalLease timeCost={}ms", stopWatch.get());
+            LOGGER.debug("renewalLease timeCost={}ms", stopWatch.get());
         }
     }
 }
