@@ -4,6 +4,8 @@ import io.etcd.jetcd.lease.LeaseKeepAliveResponse;
 import io.grpc.stub.StreamObserver;
 
 /**
+ * do nothing with stream
+ *
  * @author huangfeitao
  * @version NoopStreamObserver.java 2023/6/7 15:50 create by: huangfeitao
  **/
