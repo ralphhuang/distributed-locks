@@ -18,22 +18,21 @@ public class LockTemplate {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LockTemplate.class);
 
-    private final LockFacade lockImpl;
+    private final Lock lockImpl;
 
-    public LockTemplate(LockFacade lockImpl) {
+    public LockTemplate(Lock lockImpl) {
         this.lockImpl = lockImpl;
     }
 
-    public void doWithCallback(final LockParam lockParam, LockCallback callback) {
+    public void doWithCallback(final String lockKey, LockCallback callback) {
+
+        LockParam lockParam = LockParam.of(lockKey);
         try {
             //before lock
             callback.beforeLock();
 
             //get lock
-            StopWatch stopWatch = StopWatch.start();
-            LOGGER.debug("lock start,lockParam :{} ", lockParam);
             lockImpl.lock(lockParam);
-            LOGGER.debug("lock success,lockParam :{},time cost:{}ms", lockParam, stopWatch.get());
 
             //run callback
             callback.onGetLock();
@@ -42,7 +41,7 @@ public class LockTemplate {
             callback.onException(e);
         } finally {
             //try to release lock
-            lockImpl.release(lockParam);
+            lockImpl.unlock(lockParam.getLockKey());
         }
     }
 

@@ -3,15 +3,12 @@ package io.github.ralphhuang.distrbute.locks.impl.etcd;
 import io.etcd.jetcd.ByteSequence;
 import io.etcd.jetcd.Client;
 import io.etcd.jetcd.Lease;
-import io.etcd.jetcd.Lock;
-import io.etcd.jetcd.common.exception.ErrorCode;
-import io.etcd.jetcd.common.exception.EtcdException;
 import io.etcd.jetcd.lease.LeaseGrantResponse;
-import io.etcd.jetcd.lease.LeaseKeepAliveResponse;
 import io.etcd.jetcd.lease.LeaseRevokeResponse;
 import io.etcd.jetcd.lock.LockResponse;
 import io.etcd.jetcd.lock.UnlockResponse;
-import io.github.ralphhuang.distrbute.locks.api.LockFacade;
+import io.github.ralphhuang.distrbute.locks.api.AbstractLock;
+import io.github.ralphhuang.distrbute.locks.api.Lock;
 import io.github.ralphhuang.distrbute.locks.api.collection.Pair;
 import io.github.ralphhuang.distrbute.locks.api.domain.LockParam;
 import io.github.ralphhuang.distrbute.locks.api.exception.LockException;
@@ -30,14 +27,18 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
+ * distribute lock by EtcdV3
+ * reentrant support
+ *
  * @author huangfeitao
  * @version EtcdLock.java 2023/6/2 15:44 create by: huangfeitao
  **/
-public class EtcdLock implements LockFacade {
+public class EtcdLock extends AbstractLock implements Lock {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(EtcdLock.class);
     private static final String DEFAULT_ROOT = "/DISTRIBUTE-LOCKS/";
     private static final Long DEFAULT_TIMEOUT = 10L;
+    private static final Long ERROR_LEASE = -1L;
 
     /**
      * executes for async tasks
@@ -54,7 +55,7 @@ public class EtcdLock implements LockFacade {
      * default is /DISTRIBUTE-LOCKS/
      */
     public String rootPath;
-    private final Lock lockClient;
+    private final io.etcd.jetcd.Lock lockClient;
     private final Lease leaseClient;
 
     public EtcdLock(Client etcdClient) {
@@ -80,58 +81,56 @@ public class EtcdLock implements LockFacade {
     @Override
     public void lock(LockParam lockParam) throws LockException {
 
-        String lockPath = buildLockKey(lockParam);
+        String lockPath = buildLockPath(lockParam.getLockKey());
         final long timeout = lockParam.getTimeout();
         final TimeUnit timeoutUnit = lockParam.getTimeoutUnit();
 
+        long timeoutRemainMis = timeoutUnit.toMillis(timeout);
+        StopWatch stopWatch = StopWatch.start();
+
+        long leaseId = ERROR_LEASE;
         try {
             //lock reentrant
-            if (isReentrant(lockPath, leaseClient, lockParam)) {
-                LOGGER.debug("reentrant lock,path={}", lockPath);
+            if (isReentrant(lockPath)) {
                 return;
             }
 
             //new lock process
             //apply lease
-            LeaseGrantResponse leaseGrantResponse = applyLease(leaseClient, lockParam);
-            long leaseId = leaseGrantResponse.getID();
+            LeaseGrantResponse leaseGrantResponse = applyLease(leaseClient, lockParam, true);
+            leaseId = leaseGrantResponse.getID();
 
-            //start an auto renew task for every Lock lease
-            submitLeaseRenewTask(leaseClient, leaseId, lockParam);
+            //check timeout
+            timeoutRemainMis -= stopWatch.get();
+            if (timeoutRemainMis <= 0L) {
+                throw new LockException(LockExceptionCode.TIME_OUT);
+            }
 
             //apply lock
             ByteSequence key = ByteSequence.from(lockPath.getBytes(StandardCharsets.UTF_8));
-            StopWatch stopWatch = StopWatch.start();
-            try {
-                LockResponse response = lockClient.lock(key, leaseId).get(timeout, timeoutUnit);
-                //save key to local thread cache,for lock reentrant
-                tl.get().put(lockPath, Pair.of(leaseId, response.getKey()));
-            } finally {
-                LOGGER.debug("lock timeCost={}ms", stopWatch.get());
-            }
+            LockResponse response = lockClient.lock(key, leaseId).get(timeoutRemainMis, TimeUnit.MILLISECONDS);
+            //save key to local thread cache,for lock reentrant
+            tl.get().put(lockPath, Pair.of(leaseId, response.getKey()));
 
-        } catch (TimeoutException te) {
-            throw new LockException(LockExceptionCode.TIME_OUT);
         } catch (Throwable e) {
-            LOGGER.debug("lock error:", e);
-            throw new LockException(LockExceptionCode.LOCK_FAILED);
+            if (ERROR_LEASE != leaseId && leaseId > 0L) {
+                executorService.submit(new LeaseCleanTask(leaseClient, leaseId));
+            }
+            throw new LockException(e, e instanceof TimeoutException ? LockExceptionCode.TIME_OUT
+                                                                     : LockExceptionCode.LOCK_FAILED);
         }
     }
 
     @Override
-    public void release(LockParam lockParam) {
-
-        String lockPath = buildLockKey(lockParam);
-        final long timeout = lockParam.getTimeout();
-        final TimeUnit timeoutUnit = lockParam.getTimeoutUnit();
+    public void unlock(String lockKey) {
+        String lockPath = buildLockPath(lockKey);
 
         Pair<Long, ByteSequence> previousPair = tl.get().get(lockPath);
-
         if (previousPair != null) {
-            StopWatch stopWatch = StopWatch.start();
             try {
                 //release lock
-                UnlockResponse response = lockClient.unlock(previousPair.getRight()).get(timeout, timeoutUnit);
+                UnlockResponse response = lockClient.unlock(previousPair.getRight())
+                                                    .get(DEFAULT_TIMEOUT, TimeUnit.SECONDS);
                 LOGGER.debug("release lock response={}", response);
             } catch (Exception e) {
                 LOGGER.error("error in release lock,key={}", lockPath, e);
@@ -139,13 +138,12 @@ public class EtcdLock implements LockFacade {
                 tl.get().remove(lockPath);
                 // clean lock node after 1S,if there is no others apply or hold on this path , this lock node will be  delete
                 executorService.submit(new LeaseCleanTask(leaseClient, previousPair.getLeft()));
-                LOGGER.debug("unlock timeCost={}ms", stopWatch.get());
             }
         }
     }
 
-    private String buildLockKey(LockParam lockParam) {
-        return rootPath + lockParam.getLockKey();
+    private String buildLockPath(String lockKey) {
+        return rootPath + lockKey;
     }
 
     static class LeaseCleanTask implements Runnable {
@@ -158,44 +156,17 @@ public class EtcdLock implements LockFacade {
         }
 
         public void run() {
-            StopWatch stopWatch = StopWatch.start();
             try {
                 LeaseRevokeResponse response = leaseClient.revoke(leaseId).get(DEFAULT_TIMEOUT, TimeUnit.SECONDS);
                 LOGGER.debug("lock cleaner job response={},leaseId={}", response, leaseId);
             } catch (ExecutionException ignored) {
             } catch (Throwable e) {
                 LOGGER.warn("error in lock cleaner job,leaseId={}", leaseId, e);
-            } finally {
-                LOGGER.debug("RenewalLeaseTask timeCost={}ms", stopWatch.get());
             }
         }
     }
 
-    static class RenewalLeaseTask implements Runnable {
-        private final Lease leaseClient;
-        private final long leaseId;
-        private final LockParam lockParam;
-
-        public RenewalLeaseTask(Lease leaseClient, long leaseId, LockParam lockParam) {
-            this.leaseClient = leaseClient;
-            this.leaseId = leaseId;
-            this.lockParam = lockParam;
-        }
-
-        public void run() {
-            StopWatch stopWatch = StopWatch.start();
-            try {
-                renewalLeaseSilence(leaseClient, leaseId);
-                submitLeaseRenewTask(leaseClient, leaseId, lockParam);
-            } catch (Throwable t) {
-                LOGGER.error("unExpected error in lock renew job,leaseId={}", leaseId, t);
-            } finally {
-                LOGGER.debug("RenewalLeaseTask timeCost={}ms", stopWatch.get());
-            }
-        }
-    }
-
-    private boolean isReentrant(String lockPath, Lease leaseClient, LockParam lockParam) throws Throwable {
+    private boolean isReentrant(String lockPath) throws Throwable {
 
         Pair<Long, ByteSequence> previousPair = tl.get().get(lockPath);
         if (previousPair == null) {
@@ -210,77 +181,30 @@ public class EtcdLock implements LockFacade {
             throw new LockException(LockExceptionCode.LOCK_FAILED);
         }
 
-        try {
-            renewalLease(leaseClient, lockLeaseId, lockParam.getTimeout(), lockParam.getTimeoutUnit());
-        } catch (EtcdException e) {
-            if (e.getErrorCode() == ErrorCode.NOT_FOUND) {
-                // renew failed,treat as a new lock
-                tl.get().remove(lockPath);
-                return false;
-            }
-        }
+        //lease will auto renew,so if reentrant,just return
         return true;
     }
 
-    private static LeaseGrantResponse applyLease(Lease leaseClient, LockParam lockParam) throws LockException {
-
+    private static LeaseGrantResponse applyLease(Lease leaseClient, LockParam lockParam, boolean autoRenew)
+        throws LockException {
 
         final int maxHoldSeconds = lockParam.getMaxHoldSeconds();
-        final long timeout = lockParam.getTimeout();
-        final TimeUnit timeoutUnit = lockParam.getTimeoutUnit();
-
-        StopWatch stopWatch = StopWatch.start();
         try {
-            LeaseGrantResponse response = leaseClient.grant(maxHoldSeconds).get(timeout, timeoutUnit);
+            LeaseGrantResponse response = leaseClient.grant(maxHoldSeconds).get(DEFAULT_TIMEOUT, TimeUnit.SECONDS);
             LOGGER.debug("applyLease response={}", response);
             if (response.getID() <= 0L) {
                 throw new LockException(LockExceptionCode.LOCK_FAILED);
             }
+
+            if (autoRenew) {
+                //auto renew lease
+                leaseClient.keepAlive(response.getID(), NoopStreamObserver.INSTANCE);
+            }
+
             return response;
         } catch (Throwable t) {
             throw new LockException(LockExceptionCode.LOCK_FAILED);
-        } finally {
-            LOGGER.debug("applyLease timeCost={}ms", stopWatch.get());
         }
     }
 
-    private static void submitLeaseRenewTask(Lease leaseClient, long leaseId, LockParam lockParam) {
-        StopWatch stopWatch = StopWatch.start();
-        try {
-            int renewDelay = lockParam.getMaxHoldSeconds() / 2;
-            renewDelay = renewDelay >= 1 ? renewDelay : lockParam.getMaxHoldSeconds();
-            //run once
-            executorService.schedule(
-                new RenewalLeaseTask(leaseClient, leaseId, lockParam),
-                renewDelay,
-                TimeUnit.SECONDS
-            );
-        } finally {
-            LOGGER.debug("submitLeaseRenewTask timeCost={}ms", stopWatch.get());
-        }
-    }
-
-    private static void renewalLeaseSilence(Lease client, long leaseId) {
-        try {
-            renewalLease(client, leaseId, EtcdLock.DEFAULT_TIMEOUT, TimeUnit.SECONDS);
-        } catch (Throwable expected) {
-            // LOGGER.warn("expected error in lock renew job,leaseId={}", leaseId, expected);
-        }
-    }
-
-    private static void renewalLease(Lease client, long leaseId, Long timeout, TimeUnit timeoutUnit)
-        throws Throwable {
-        StopWatch stopWatch = StopWatch.start();
-        try {
-            // Reentrant  renew lease
-            LeaseKeepAliveResponse response = client.keepAliveOnce(leaseId).get(timeout, timeoutUnit);
-            LOGGER.debug("renewalLease job response={},leaseId={}", response, leaseId);
-            //must Renewal successful,if failed ,ttl will return -1
-            if (response.getTTL() <= 0) {
-                throw new LockException(LockExceptionCode.LOCK_FAILED);
-            }
-        } finally {
-            LOGGER.debug("renewalLease timeCost={}ms", stopWatch.get());
-        }
-    }
 }

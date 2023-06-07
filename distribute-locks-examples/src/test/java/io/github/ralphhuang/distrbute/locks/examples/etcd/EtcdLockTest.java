@@ -4,18 +4,19 @@ import io.etcd.jetcd.ByteSequence;
 import io.etcd.jetcd.Client;
 import io.etcd.jetcd.Lease;
 import io.etcd.jetcd.lease.LeaseGrantResponse;
+import io.etcd.jetcd.lease.LeaseKeepAliveResponse;
+import io.etcd.jetcd.options.LeaseOption;
 import io.github.ralphhuang.distrbute.locks.api.domain.LockParam;
 import io.github.ralphhuang.distrbute.locks.api.exception.LockException;
-import io.github.ralphhuang.distrbute.locks.api.util.StopWatch;
 import io.github.ralphhuang.distrbute.locks.examples.BaseTest;
 import io.github.ralphhuang.distrbute.locks.impl.etcd.EtcdLock;
+import io.grpc.stub.StreamObserver;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
-import java.time.temporal.TemporalUnit;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -39,9 +40,7 @@ public class EtcdLockTest extends BaseTest {
                                   .namespace(ByteSequence.from("/ectcLock/".getBytes(StandardCharsets.UTF_8)))
                                   .target(etcdTarget)
                                   .waitForReady(true)
-                                  //最大重连持续30分钟
                                   .retryMaxDuration(Duration.of(30, ChronoUnit.MINUTES))
-                                  //重试时间间隔，10秒
                                   .retryDelay(10)
                                   .retryChronoUnit(ChronoUnit.SECONDS)
                                   .keepaliveWithoutCalls(true)
@@ -68,7 +67,7 @@ public class EtcdLockTest extends BaseTest {
         }
 
         for (int i = 0; i < reentrantTimes; i++) {
-            etcdLock.release(lockParam);
+            etcdLock.unlock(lockParam.getLockKey());
         }
 
         pause();
@@ -78,16 +77,16 @@ public class EtcdLockTest extends BaseTest {
     public void run() {
 
         //time in mis to hold lock after apply lock success
-        //Supplier<Integer> supplier = () -> 1000;
         Supplier<Integer> supplier = () -> new Random().nextInt(300) + 20;
+        //lock param
         Supplier<LockParam> lockParamSupplier = () -> LockParam.of(
             "lockKey-" + UUID.randomUUID(), 1000, TimeUnit.SECONDS, 30);
 
         //3 group,16 thread per group apply for a lock in loop
 
-        for (int i = 0; i < 2; i++) {
-            multiThreadForOneLock(16, supplier, lockParamSupplier, etcdLock);
-        }
+        multiThreadForOneLock(16, supplier, lockParamSupplier, etcdLock);
+        multiThreadForOneLock(11, supplier, lockParamSupplier, etcdLock);
+        multiThreadForOneLock(14, supplier, lockParamSupplier, etcdLock);
 
         pause();
 
@@ -110,38 +109,58 @@ public class EtcdLockTest extends BaseTest {
     }
 
     /**
-     * 问题：lease.grant 每个线程的第一次执行，耗时比较久
-     *
-     * @throws ExecutionException
-     * @throws InterruptedException
+     * lease 自动续期？
      */
     @Test
     public void leaseTime() throws ExecutionException, InterruptedException {
 
         Client etcdClient = Client.builder().target(etcdTarget).build();
 
-        int i = 32;
-
         Lease lease = etcdClient.getLeaseClient();
 
-        for (int j = 0; j < i; j++) {
-            int finalJ = j;
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    for (int k = 0; k < 5; k++) {
-                        StopWatch stopWatch = StopWatch.start();
-                        try {
-                            LeaseGrantResponse response = lease.grant(3, 10, TimeUnit.SECONDS).get();
-                        } catch (Throwable e) {
-                            e.printStackTrace();
-                        }
-                        LOGGER.info("index={},timeCost={}ms", finalJ, stopWatch.get());
-                        //sleep(new Random().nextInt(100));
-                    }
+        //apply lease with N sesc
+        int time = 5;
+        LeaseGrantResponse response = lease.grant(time).get();
+        LOGGER.info("leaseGrant:{}", response);
+
+        //add auto renew
+        lease.keepAlive(response.getID(), new StreamObserver<LeaseKeepAliveResponse>() {
+            @Override
+            public void onNext(LeaseKeepAliveResponse response) {
+                LOGGER.info("onNext:{}", response);
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+                LOGGER.info("onError:",throwable);
+            }
+
+            @Override
+            public void onCompleted() {
+                LOGGER.info("onCompleted");
+            }
+        });
+
+        new Thread(() -> {
+
+            LOGGER.info("watcher thread started!");
+
+            sleep(time * 1000 + 2000);
+
+            //每5秒查看一次lease情况
+           // while (true) {
+                try {
+                    LOGGER.info("lease ttl: {}", lease.timeToLive(response.getID(), LeaseOption.DEFAULT).get());
+                    //释放了
+                    LOGGER.info("lease revoke: {}", lease.revoke(response.getID()).get());
+                } catch (Exception e) {
+                    LOGGER.error("error:", e);
+                    System.exit(-1);
                 }
-            }).start();
-        }
+
+                sleep(1000);
+           // }
+        }, "lease-watch-thread").start();
 
         pause();
     }

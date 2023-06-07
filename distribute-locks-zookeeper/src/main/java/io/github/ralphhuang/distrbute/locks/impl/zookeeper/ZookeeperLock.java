@@ -1,6 +1,7 @@
 package io.github.ralphhuang.distrbute.locks.impl.zookeeper;
 
-import io.github.ralphhuang.distrbute.locks.api.LockFacade;
+import io.github.ralphhuang.distrbute.locks.api.AbstractLock;
+import io.github.ralphhuang.distrbute.locks.api.Lock;
 import io.github.ralphhuang.distrbute.locks.api.domain.LockParam;
 import io.github.ralphhuang.distrbute.locks.api.exception.LockException;
 import io.github.ralphhuang.distrbute.locks.api.exception.LockExceptionCode;
@@ -20,7 +21,7 @@ import java.util.concurrent.TimeUnit;
  * @author huangfeitao
  * @version ZookeeperLock.java 2023/6/2 10:37 create by: huangfeitao
  **/
-public class ZookeeperLock implements LockFacade {
+public class ZookeeperLock extends AbstractLock implements Lock {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ZookeeperLock.class);
     private static final String DEFAULT_ROOT = "/DISTRIBUTE-LOCKS/";
@@ -65,7 +66,7 @@ public class ZookeeperLock implements LockFacade {
     @Override
     public void lock(LockParam lockParam) throws LockException {
 
-        String lockPath = buildLockPath(lockParam);
+        String lockPath = buildLockPath(lockParam.getLockKey());
 
         // for Reentrant
         InterProcessMutex mutex = tl.get().get(lockPath);
@@ -85,9 +86,8 @@ public class ZookeeperLock implements LockFacade {
     }
 
     @Override
-    public void release(LockParam lockParam) {
-
-        String lockPath = buildLockPath(lockParam);
+    public void unlock(String lockKey) {
+        String lockPath = buildLockPath(lockKey);
 
         InterProcessMutex mutex = tl.get().get(lockPath);
         if (mutex == null) {
@@ -102,20 +102,20 @@ public class ZookeeperLock implements LockFacade {
             LOGGER.error("error in lock release:", t);
         } finally {
             tl.get().remove(lockPath);
-            // clean lock node after 1S,if there is no others apply or hold on this path , this lock node will be  delete
-            executorService.schedule(new CleanerTask(zkClient, buildLockPath(lockParam)), 1L, TimeUnit.SECONDS);
+            // clean lock node after 1S,if there is no others apply or hold on this path,this lock node will be  delete
+            executorService.schedule(new LockNodeCleanTask(zkClient, lockPath), 1L, TimeUnit.SECONDS);
         }
     }
 
-    private String buildLockPath(LockParam lockParam) {
-        return rootPath + lockParam.getLockKey();
+    private String buildLockPath(String lockKey) {
+        return rootPath + lockKey;
     }
 
-    static class CleanerTask implements Runnable {
+    static class LockNodeCleanTask implements Runnable {
         private final CuratorFramework client;
         private final String path;
 
-        public CleanerTask(CuratorFramework client, String path) {
+        public LockNodeCleanTask(CuratorFramework client, String path) {
             this.client = client;
             this.path = path;
         }
@@ -133,6 +133,5 @@ public class ZookeeperLock implements LockFacade {
                 LOGGER.error("error in lock cleaner job,path={}", path, e);
             }
         }
-
     }
 }

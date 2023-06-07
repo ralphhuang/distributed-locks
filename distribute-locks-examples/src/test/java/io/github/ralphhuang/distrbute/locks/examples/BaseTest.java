@@ -1,6 +1,6 @@
 package io.github.ralphhuang.distrbute.locks.examples;
 
-import io.github.ralphhuang.distrbute.locks.api.LockFacade;
+import io.github.ralphhuang.distrbute.locks.api.Lock;
 import io.github.ralphhuang.distrbute.locks.api.LockTemplate;
 import io.github.ralphhuang.distrbute.locks.api.callback.LockCallback;
 import io.github.ralphhuang.distrbute.locks.api.domain.LockParam;
@@ -47,12 +47,12 @@ public class BaseTest {
         int threadNums,
         Supplier<Integer> supplier,
         Supplier<LockParam> lockParamSupplier,
-        LockFacade lockFacadeImpl
+        Lock lockImpl
     ) {
 
         //多个线程持续竞争同一把锁
         LockParam lockParam = lockParamSupplier.get();
-        LOGGER.info("lockFacade impl is {}", lockFacadeImpl);
+        LOGGER.info("lockFacade impl is {}", lockImpl);
         int groupId = G_ID.incrementAndGet();
         AtomicInteger T_ID = new AtomicInteger();
 
@@ -61,8 +61,8 @@ public class BaseTest {
                 while (true) {
                     try {
                         LOGGER.info("try lock");
-                        lockFacadeImpl.lock(lockParam);
-                        lockFacadeImpl.lock(lockParam);
+                        lockImpl.lock(lockParam);
+                        lockImpl.lock(lockParam);
                         LOGGER.info("lock success");
                     } catch (Exception e) {
                         LOGGER.error("lock error", e);
@@ -75,8 +75,8 @@ public class BaseTest {
                     //release lock
                     try {
                         LOGGER.info("try unlock");
-                        lockFacadeImpl.release(lockParam);
-                        lockFacadeImpl.release(lockParam);
+                        lockImpl.unlock(lockParam.getLockKey());
+                        lockImpl.unlock(lockParam.getLockKey());
                         LOGGER.info("unlock success");
                     } catch (Exception e) {
                         LOGGER.error("unlock error");
@@ -93,21 +93,21 @@ public class BaseTest {
         int threadNums,
         Supplier<Integer> supplier,
         Supplier<LockParam> lockParamSupplier,
-        LockFacade lockFacadeImpl
+        Lock lockImpl
     ) {
 
         LockParam lockParam = lockParamSupplier.get();
 
-        LOGGER.info("lockFacade impl is {}", lockFacadeImpl);
+        LOGGER.info("lockFacade impl is {}", lockImpl);
         LOGGER.info("lockParam is {}", lockParam);
 
-        LockTemplate lockTemplate = new LockTemplate(lockFacadeImpl);
+        LockTemplate lockTemplate = new LockTemplate(lockImpl);
 
         for (int i = 0; i < threadNums; i++) {
             new Thread(() -> {
 
                 while (true) {
-                    lockTemplate.doWithCallback(lockParam, new LockCallback() {
+                    lockTemplate.doWithCallback(lockParam.getLockKey(), new LockCallback() {
 
                         @Override
                         public void beforeLock() {
