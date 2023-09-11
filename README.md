@@ -1,3 +1,3 @@
-# distribute-locks
+# distributed-locks
 
-distribute-locks by etcdV3 and Zookeeper,reentrant support.
+distributed locks by etcdV3 and Zookeeper,reentrant support.

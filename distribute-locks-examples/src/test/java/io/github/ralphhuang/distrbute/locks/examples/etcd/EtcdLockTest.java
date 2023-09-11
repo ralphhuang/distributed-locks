@@ -103,6 +103,8 @@ public class EtcdLockTest extends BaseTest {
 
         //32 thread apply for a lock in loop
         multiThreadForOneLockWithLockTemplate(8, supplier, lockParamSupplier, etcdLock);
+        multiThreadForOneLockWithLockTemplate(18, supplier, lockParamSupplier, etcdLock);
+        multiThreadForOneLockWithLockTemplate(28, supplier, lockParamSupplier, etcdLock);
 
         pause();
 
